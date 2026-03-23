@@ -8,164 +8,227 @@ import {
   Animated, 
   Dimensions,
   ActivityIndicator,
-  StatusBar
+  StatusBar,
+  ScrollView
 } from 'react-native';
 
+// Obtemos a largura da tela do dispositivo para ajustes de layout responsivo
 const { width } = Dimensions.get('window');
+
+// --- DESIGN SYSTEM (Definição das cores globais para fácil manutenção) ---
+const COLORS = {
+  primaryBlue: '#2F4DA0',    // Azul institucional usado no Header
+  modernBlue: '#3B5BDB',     // Azul vibrante para botões de ação
+  lightBlue: '#E7F0FF',      // Fundo suave para caixas de informação
+  positiveGreen: '#2D6A4F',  // Verde escuro para textos de confirmação
+  lightGreen: '#D8F3DC',     // Verde claro para o card de "Fila Tranquila"
+  background: '#F8F9FA',     // Cor de fundo leve para o app todo
+  white: '#FFFFFF',          // Branco puro para cards e textos no azul
+  secondaryText: '#6C757D',  // Cinza para descrições e textos menos importantes
+  darkText: '#212529',       // Preto suave para melhor leitura
+  border: '#DEE2E6'          // Cor padrão para bordas e divisores
+};
 
 // --- COMPONENTES AUXILIARES ---
 
-const Button = ({ title, onPress, color = '#2ECC71', textColor = '#FFF', disabled = false }) => (
+// Componente do Topo (Header) com animação no indicador "AO VIVO"
+const Header = () => {
+  const pulseAnim = useRef(new Animated.Value(1)).current; // Cria uma referência para o valor da animação
+
+  useEffect(() => {
+    // Configura uma animação infinita de "pulsação" (opacidade)
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 0.3, duration: 1000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  return (
+    <View style={styles.header}>
+      <Text style={styles.headerTitle}>FilaRural</Text>
+      <View style={styles.liveBadge}>
+        {/* O ponto vermelho que pisca */}
+        <Animated.View style={[styles.liveDot, { opacity: pulseAnim }]} />
+        <Text style={styles.liveText}>AO VIVO</Text>
+      </View>
+    </View>
+  );
+};
+
+// Componente de Botão Reutilizável
+const Button = ({ title, onPress, color = COLORS.modernBlue, textColor = COLORS.white, outline = false, disabled = false }) => (
   <TouchableOpacity 
-    activeOpacity={0.8} 
-    style={[styles.button, { backgroundColor: color, opacity: disabled ? 0.6 : 1 }]} 
+    activeOpacity={0.8} // Efeito visual de clique
+    style={[
+      styles.button, 
+      { backgroundColor: outline ? 'transparent' : color, opacity: disabled ? 0.6 : 1 },
+      outline && { borderWidth: 2, borderColor: COLORS.border } // Estilo se for apenas borda
+    ]} 
     onPress={onPress}
     disabled={disabled}
   >
-    <Text style={[styles.buttonText, { color: textColor }]}>{title}</Text>
+    <Text style={[styles.buttonText, { color: outline ? COLORS.secondaryText : textColor }]}>{title}</Text>
   </TouchableOpacity>
 );
 
-const Card = ({ label, selected, onPress }) => (
-  <TouchableOpacity 
-    style={[styles.card, selected && styles.cardSelected]} 
-    onPress={onPress}
-  >
-    <Text style={[styles.cardText, selected && styles.cardTextSelected]}>{label}</Text>
-  </TouchableOpacity>
+// Componente das barras do gráfico de fluxo
+const ChartBar = ({ label, value, active = false }) => (
+  <View style={styles.barContainer}>
+    <View style={[styles.barBackground, { height: 80 }]}>
+      {/* A altura da barra é definida pela prop 'value' */}
+      <View style={[styles.barFill, { height: value, backgroundColor: active ? COLORS.modernBlue : '#CED4DA' }]} />
+    </View>
+    <Text style={[styles.barLabel, active && { fontWeight: 'bold', color: COLORS.darkText }]}>{label}</Text>
+  </View>
 );
 
-// --- TELA PRINCIPAL (LOGICA DE NAVEGAÇÃO) ---
+// --- TELA PRINCIPAL ---
 
 export default function App() {
-  // Estados do Fluxo
-  const [step, setStep] = useState('splash'); // splash, home, gps, q1, q2, loading, result
-  const [isOnQueue, setIsOnQueue] = useState(null);
-  const [queueEnd, setQueueEnd] = useState('');
-  const [loading, setLoading] = useState(false);
+  // ESTADOS: Controlam o que aparece na tela e os dados do usuário
+  const [step, setStep] = useState('splash'); // Controla qual "etapa" ou tela está ativa
+  const [queueEnd, setQueueEnd] = useState(''); // Armazena o local do fim da fila selecionado
+  const fadeAnim = useRef(new Animated.Value(0)).current; // Valor para o efeito de transição entre telas
 
-  // Animações
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
+  // Efeito executado sempre que a tela (step) muda
   useEffect(() => {
-    // Efeito de Fade In sempre que mudar de tela
-    fadeAnim.setValue(0);
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
-
-    // Lógica Automática da Splash
-    if (step === 'splash') {
-      setTimeout(() => setStep('home'), 2500);
-    }
+    fadeAnim.setValue(0); // Reinicia a opacidade para 0
+    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start(); // Faz o Fade In
+    
+    // Se estiver na Splash, espera 2 segundos e vai para a Home automaticamente
+    if (step === 'splash') setTimeout(() => setStep('home'), 2000);
   }, [step]);
 
-  // Simulação de Envio para Backend (FastAPI ready)
-  const handleSend = () => {
-    setLoading(true);
-    setStep('loading');
-    
-    // Simulando delay de rede
-    setTimeout(() => {
-      setLoading(false);
-      setStep('result');
-    }, 2000);
-  };
-
-  // --- RENDERIZAÇÃO DE TELAS ---
-
+  // FUNÇÃO DE RENDERIZAÇÃO: Escolhe qual conteúdo mostrar baseado no 'step'
   const renderContent = () => {
     switch (step) {
       case 'splash':
         return (
           <View style={styles.center}>
-            <View style={styles.logoCircle}>
-              <Text style={{fontSize: 50}}>🍽️</Text>
-            </View>
+            <View style={styles.logoCircle}><Text style={{fontSize: 60}}>🌾</Text></View>
             <Text style={styles.logoText}>FilaRural</Text>
           </View>
         );
 
       case 'home':
         return (
-          <View style={styles.containerStep}>
-            <Text style={styles.title}>FilaRural</Text>
-            <Text style={styles.subtitle}>Veja o tamanho da fila do RU em tempo real e ajude a comunidade.</Text>
-            <Button title="Começar" onPress={() => setStep('gps')} />
+          <View style={styles.fullContent}>
+            <Header />
+            <ScrollView contentContainerStyle={styles.containerStep}>
+              <View style={styles.infoBox}>
+                <Text style={styles.infoText}>ℹ️ Campus Rural - Restaurante Universitário</Text>
+              </View>
+              <Text style={styles.title}>Fila em Tempo Real</Text>
+              <Text style={styles.subtitle}>Veja como está a movimentação do RU agora e evite filas.</Text>
+              
+              <View style={styles.chartSection}>
+                <Text style={styles.sectionTitle}>Fluxo de Ocupação Hoje</Text>
+                <View style={styles.chartRow}>
+                  <ChartBar label="07h" value={15} />
+                  <ChartBar label="11h" value={80} active />
+                  <ChartBar label="13h" value={45} />
+                  <ChartBar label="18h" value={65} />
+                </View>
+              </View>
+
+              <Button title="Consultar Fila" onPress={() => setStep('gps')} />
+            </ScrollView>
           </View>
         );
 
       case 'gps':
         return (
-          <View style={styles.containerStep}>
-            <Text style={styles.emoji}>📍</Text>
-            <Text style={styles.titleSmall}>Verificação de Presença</Text>
-            <Text style={styles.description}>
-              Precisamos da sua localização para validar sua presença no Restaurante Universitário.
-            </Text>
-            <Button title="Permitir Localização" onPress={() => setStep('q1')} />
+          <View style={styles.fullContent}>
+            <Header />
+            <View style={styles.containerStep}>
+              <Text style={styles.emoji}>📍</Text>
+              <Text style={styles.titleSmall}>Verificar Localização</Text>
+              <Text style={styles.description}>Precisamos confirmar que você está no campus para validar os dados.</Text>
+              <Button title="Permitir Acesso" onPress={() => setStep('q1')} />
+            </View>
           </View>
         );
 
       case 'q1':
         return (
-          <View style={styles.containerStep}>
-            <Text style={styles.titleSmall}>Você está na fila agora?</Text>
-            <Button title="Sim, estou na fila" onPress={() => { setIsOnQueue(true); setStep('q2'); }} />
-            <View style={{ height: 15 }} />
-            <Button 
-              title="Não estou na fila" 
-              color="#E0E0E0" 
-              textColor="#757575" 
-              onPress={() => setStep('result')} 
-            />
+          <View style={styles.fullContent}>
+            <Header />
+            <View style={styles.containerStep}>
+              <Text style={styles.titleSmall}>Você está na fila?</Text>
+              <Button title="Sim, estou na fila" onPress={() => setStep('q2')} />
+              <View style={{ height: 12 }} />
+              <Button title="Não, quero apenas ver" outline onPress={() => setStep('result')} />
+            </View>
           </View>
         );
 
       case 'q2':
         return (
-          <View style={styles.containerStep}>
-            <Text style={styles.titleSmall}>Onde está o final da fila?</Text>
-            <View style={styles.cardGrid}>
-              {['Entrada', 'Árvore', 'Banco', 'Portão'].map((item) => (
-                <Card 
-                  key={item} 
-                  label={item} 
-                  selected={queueEnd === item} 
-                  onPress={() => setQueueEnd(item)} 
-                />
-              ))}
+          <View style={styles.fullContent}>
+            <Header />
+            <View style={styles.containerStep}>
+              <Text style={styles.titleSmall}>Onde a fila termina?</Text>
+              <View style={styles.cardGrid}>
+                {['Entrada', 'Árvore', 'Banco', 'Portão'].map((item) => (
+                  <TouchableOpacity 
+                    key={item} 
+                    style={[styles.card, queueEnd === item && styles.cardSelected]} 
+                    onPress={() => setQueueEnd(item)} // Salva a escolha do usuário
+                  >
+                    <Text style={[styles.cardText, queueEnd === item && styles.cardTextSelected]}>{item}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Button 
+                title="Confirmar e Ver Resultado" 
+                disabled={!queueEnd} // Desabilita se nada for selecionado
+                onPress={() => {setStep('loading'); setTimeout(() => setStep('result'), 1500);}} 
+              />
             </View>
-            <Button title="Enviar Informações" disabled={!queueEnd} onPress={handleSend} />
           </View>
         );
 
       case 'loading':
         return (
           <View style={styles.center}>
-            <ActivityIndicator size="large" color="#2ECC71" />
-            <Text style={styles.loadingText}>Processando dados...</Text>
+            <ActivityIndicator size="large" color={COLORS.primaryBlue} />
+            <Text style={styles.loadingText}>Sincronizando dados...</Text>
           </View>
         );
 
       case 'result':
         return (
-          <View style={styles.containerStep}>
-            <Text style={styles.titleSmall}>Status da Fila</Text>
-            <View style={styles.resultBox}>
-              <View style={styles.resultItem}>
-                <Text style={styles.resultLabel}>Distância</Text>
-                <Text style={styles.resultValue}>45 metros</Text>
+          <View style={styles.fullContent}>
+            <Header />
+            <ScrollView contentContainerStyle={styles.containerStep}>
+              {/* Card Verde de Status */}
+              <View style={styles.statusMainCard}>
+                <View style={styles.statusHeader}>
+                   <Text style={styles.statusTitle}>Fila tranquila!</Text>
+                   <Text style={{fontSize: 24}}>🔄</Text>
+                </View>
+                <Text style={styles.statusDescription}>O fluxo está rápido. Ótimo momento para ir ao RU!</Text>
               </View>
-              <View style={styles.divider} />
-              <View style={styles.resultItem}>
-                <Text style={styles.resultLabel}>Tempo Médio</Text>
-                <Text style={styles.resultValue}>12 minutos</Text>
+
+              {/* Box Branco com os resultados numéricos */}
+              <View style={styles.resultBox}>
+                <View style={styles.resultItem}>
+                  <Text style={styles.resultLabel}>TEMPO DE ESPERA</Text>
+                  <Text style={[styles.resultValue, {color: COLORS.positiveGreen}]}>12 min</Text>
+                </View>
+                <View style={styles.divider} />
+                <View style={styles.resultItem}>
+                  <Text style={styles.resultLabel}>TAMANHO DA FILA</Text>
+                  <Text style={styles.resultValue}>45 metros</Text>
+                </View>
               </View>
-            </View>
-            <Button title="Voltar ao Início" color="#f1f1f1" textColor="#333" onPress={() => setStep('home')} />
+
+              <Button title="Voltar ao Início" onPress={() => setStep('home')} />
+              <View style={{ height: 20 }} />
+              <Text style={styles.footerNote}>Última atualização: agora mesmo</Text>
+            </ScrollView>
           </View>
         );
     }
@@ -173,7 +236,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.primaryBlue} />
       <Animated.View style={[styles.mainContainer, { opacity: fadeAnim }]}>
         {renderContent()}
       </Animated.View>
@@ -181,159 +244,70 @@ export default function App() {
   );
 }
 
-// --- ESTILIZAÇÃO (DESIGN SYSTEM) ---
-
+// --- ESTILIZAÇÃO (CSS-in-JS) ---
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  mainContainer: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'center',
-  },
-  center: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  containerStep: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  // Typography
-  logoText: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#2ECC71',
-    marginTop: 20,
-    letterSpacing: -1,
-  },
-  title: {
-    fontSize: 42,
-    fontWeight: '900',
-    color: '#333',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  titleSmall: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#333',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  subtitle: {
-    fontSize: 18,
-    color: '#7F8C8D',
-    textAlign: 'center',
-    marginBottom: 40,
-    lineHeight: 26,
-  },
-  description: {
-    fontSize: 16,
-    color: '#95A5A6',
-    textAlign: 'center',
-    marginBottom: 30,
-  },
-  // Components
-  logoCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#F1FDF6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: "#2ECC71",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  button: {
-    width: '100%',
+  safeArea: { flex: 1, backgroundColor: COLORS.background }, // Garante que o app não invada a área da câmera/notch
+  mainContainer: { flex: 1 },
+  fullContent: { flex: 1 },
+  header: {
+    backgroundColor: COLORS.primaryBlue,
+    paddingHorizontal: 24,
     paddingVertical: 18,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  buttonText: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  emoji: {
-    fontSize: 60,
-    marginBottom: 20,
-  },
-  // Cards Grid
-  cardGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 30,
+    alignItems: 'center',
+    borderBottomLeftRadius: 20, // Arredondamento moderno inferior
+    borderBottomRightRadius: 20,
+    elevation: 8, // Sombra no Android
+    shadowColor: '#000', // Sombra no iOS
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
   },
-  card: {
-    width: '47%',
-    backgroundColor: '#F8F9F9',
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 15,
-    borderWidth: 2,
-    borderColor: 'transparent',
+  headerTitle: { color: COLORS.white, fontSize: 22, fontWeight: 'bold' },
+  liveBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)', // Branco com transparência
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  cardSelected: {
-    borderColor: '#2ECC71',
-    backgroundColor: '#F1FDF6',
-  },
-  cardText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#7F8C8D',
-  },
-  cardTextSelected: {
-    color: '#2ECC71',
-  },
-  // Results
-  resultBox: {
-    width: '100%',
-    backgroundColor: '#F8F9F9',
-    borderRadius: 24,
-    padding: 30,
-    marginBottom: 30,
-    alignItems: 'center',
-  },
-  resultItem: {
-    alignItems: 'center',
-    marginVertical: 10,
-  },
-  resultLabel: {
-    fontSize: 14,
-    color: '#95A5A6',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  resultValue: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#2C3E50',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#EAECEE',
-    width: '80%',
-    marginVertical: 15,
-  },
-  loadingText: {
-    marginTop: 15,
-    color: '#7F8C8D',
-    fontSize: 16,
-  }
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF4D4D', marginRight: 6 },
+  liveText: { color: COLORS.white, fontSize: 11, fontWeight: 'bold' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.white },
+  containerStep: { flexGrow: 1, padding: 24, justifyContent: 'center' },
+  logoText: { fontSize: 38, fontWeight: '900', color: COLORS.primaryBlue, marginTop: 24 },
+  logoCircle: { width: 140, height: 140, borderRadius: 70, backgroundColor: COLORS.lightBlue, alignItems: 'center', justifyContent: 'center', elevation: 12 },
+  title: { fontSize: 32, fontWeight: '800', color: COLORS.darkText, textAlign: 'center', marginBottom: 10 },
+  titleSmall: { fontSize: 24, fontWeight: '700', color: COLORS.darkText, textAlign: 'center', marginBottom: 24 },
+  subtitle: { fontSize: 17, color: COLORS.secondaryText, textAlign: 'center', marginBottom: 35 },
+  description: { fontSize: 16, color: COLORS.secondaryText, textAlign: 'center', marginBottom: 35 },
+  button: { width: '100%', paddingVertical: 18, borderRadius: 20, alignItems: 'center', elevation: 4 },
+  buttonText: { fontSize: 17, fontWeight: '700' },
+  infoBox: { backgroundColor: COLORS.lightBlue, padding: 14, borderRadius: 16, marginBottom: 24 },
+  infoText: { color: COLORS.primaryBlue, fontSize: 14, fontWeight: '700', textAlign: 'center' },
+  chartSection: { width: '100%', backgroundColor: COLORS.white, padding: 20, borderRadius: 24, marginBottom: 35, elevation: 3 },
+  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: COLORS.secondaryText, marginBottom: 20, textAlign: 'center' },
+  chartRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end' }, // Alinha as barras pela base
+  barContainer: { alignItems: 'center' },
+  barBackground: { width: 14, backgroundColor: '#F1F3F5', borderRadius: 7, justifyContent: 'flex-end' },
+  barFill: { width: '100%', borderRadius: 7 }, // Barra colorida do gráfico
+  barLabel: { fontSize: 11, color: COLORS.secondaryText, marginTop: 10 },
+  cardGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 24 },
+  card: { width: '48%', backgroundColor: COLORS.white, padding: 22, borderRadius: 18, marginBottom: 15, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center' },
+  cardSelected: { borderColor: COLORS.modernBlue, backgroundColor: COLORS.lightBlue },
+  cardText: { fontWeight: '600', color: COLORS.secondaryText, fontSize: 15 },
+  cardTextSelected: { color: COLORS.modernBlue },
+  statusMainCard: { width: '100%', backgroundColor: COLORS.lightGreen, borderRadius: 22, padding: 22, marginBottom: 20 },
+  statusHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  statusTitle: { fontSize: 22, fontWeight: '800', color: COLORS.positiveGreen },
+  statusDescription: { color: COLORS.positiveGreen, fontSize: 15, opacity: 0.85 },
+  resultBox: { width: '100%', backgroundColor: COLORS.white, borderRadius: 24, padding: 28, marginBottom: 25, elevation: 5 },
+  resultItem: { alignItems: 'center' },
+  resultLabel: { fontSize: 12, color: COLORS.secondaryText, fontWeight: 'bold' },
+  resultValue: { fontSize: 34, fontWeight: '900', color: COLORS.darkText },
+  divider: { height: 1, backgroundColor: '#F1F3F5', width: '100%', marginVertical: 18 },
+  loadingText: { marginTop: 20, color: COLORS.secondaryText },
+  emoji: { fontSize: 68, textAlign: 'center', marginBottom: 24 },
+  footerNote: { fontSize: 13, color: COLORS.secondaryText, textAlign: 'center', fontStyle: 'italic' }
 });
