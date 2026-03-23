@@ -118,7 +118,7 @@ export default function App() {
             <Header />
             <ScrollView contentContainerStyle={styles.containerStep}>
               <View style={styles.infoBox}>
-                <Text style={styles.infoText}>ℹ️ Campus Rural - Restaurante Universitário</Text>
+                <Text style={styles.infoText}>ℹ️ Universidade Federal Rural De Pernambuco - Restaurante Universitário</Text>
               </View>
               <Text style={styles.title}>Fila em Tempo Real</Text>
               <Text style={styles.subtitle}>Veja como está a movimentação do RU agora e evite filas.</Text>
