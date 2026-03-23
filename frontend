@@ -1,0 +1,339 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  TouchableOpacity, 
+  SafeAreaView, 
+  Animated, 
+  Dimensions,
+  ActivityIndicator,
+  StatusBar
+} from 'react-native';
+
+const { width } = Dimensions.get('window');
+
+// --- COMPONENTES AUXILIARES ---
+
+const Button = ({ title, onPress, color = '#2ECC71', textColor = '#FFF', disabled = false }) => (
+  <TouchableOpacity 
+    activeOpacity={0.8} 
+    style={[styles.button, { backgroundColor: color, opacity: disabled ? 0.6 : 1 }]} 
+    onPress={onPress}
+    disabled={disabled}
+  >
+    <Text style={[styles.buttonText, { color: textColor }]}>{title}</Text>
+  </TouchableOpacity>
+);
+
+const Card = ({ label, selected, onPress }) => (
+  <TouchableOpacity 
+    style={[styles.card, selected && styles.cardSelected]} 
+    onPress={onPress}
+  >
+    <Text style={[styles.cardText, selected && styles.cardTextSelected]}>{label}</Text>
+  </TouchableOpacity>
+);
+
+// --- TELA PRINCIPAL (LOGICA DE NAVEGAÇÃO) ---
+
+export default function App() {
+  // Estados do Fluxo
+  const [step, setStep] = useState('splash'); // splash, home, gps, q1, q2, loading, result
+  const [isOnQueue, setIsOnQueue] = useState(null);
+  const [queueEnd, setQueueEnd] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // Animações
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Efeito de Fade In sempre que mudar de tela
+    fadeAnim.setValue(0);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+
+    // Lógica Automática da Splash
+    if (step === 'splash') {
+      setTimeout(() => setStep('home'), 2500);
+    }
+  }, [step]);
+
+  // Simulação de Envio para Backend (FastAPI ready)
+  const handleSend = () => {
+    setLoading(true);
+    setStep('loading');
+    
+    // Simulando delay de rede
+    setTimeout(() => {
+      setLoading(false);
+      setStep('result');
+    }, 2000);
+  };
+
+  // --- RENDERIZAÇÃO DE TELAS ---
+
+  const renderContent = () => {
+    switch (step) {
+      case 'splash':
+        return (
+          <View style={styles.center}>
+            <View style={styles.logoCircle}>
+              <Text style={{fontSize: 50}}>🍽️</Text>
+            </View>
+            <Text style={styles.logoText}>FilaRural</Text>
+          </View>
+        );
+
+      case 'home':
+        return (
+          <View style={styles.containerStep}>
+            <Text style={styles.title}>FilaRural</Text>
+            <Text style={styles.subtitle}>Veja o tamanho da fila do RU em tempo real e ajude a comunidade.</Text>
+            <Button title="Começar" onPress={() => setStep('gps')} />
+          </View>
+        );
+
+      case 'gps':
+        return (
+          <View style={styles.containerStep}>
+            <Text style={styles.emoji}>📍</Text>
+            <Text style={styles.titleSmall}>Verificação de Presença</Text>
+            <Text style={styles.description}>
+              Precisamos da sua localização para validar sua presença no Restaurante Universitário.
+            </Text>
+            <Button title="Permitir Localização" onPress={() => setStep('q1')} />
+          </View>
+        );
+
+      case 'q1':
+        return (
+          <View style={styles.containerStep}>
+            <Text style={styles.titleSmall}>Você está na fila agora?</Text>
+            <Button title="Sim, estou na fila" onPress={() => { setIsOnQueue(true); setStep('q2'); }} />
+            <View style={{ height: 15 }} />
+            <Button 
+              title="Não estou na fila" 
+              color="#E0E0E0" 
+              textColor="#757575" 
+              onPress={() => setStep('result')} 
+            />
+          </View>
+        );
+
+      case 'q2':
+        return (
+          <View style={styles.containerStep}>
+            <Text style={styles.titleSmall}>Onde está o final da fila?</Text>
+            <View style={styles.cardGrid}>
+              {['Entrada', 'Árvore', 'Banco', 'Portão'].map((item) => (
+                <Card 
+                  key={item} 
+                  label={item} 
+                  selected={queueEnd === item} 
+                  onPress={() => setQueueEnd(item)} 
+                />
+              ))}
+            </View>
+            <Button title="Enviar Informações" disabled={!queueEnd} onPress={handleSend} />
+          </View>
+        );
+
+      case 'loading':
+        return (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color="#2ECC71" />
+            <Text style={styles.loadingText}>Processando dados...</Text>
+          </View>
+        );
+
+      case 'result':
+        return (
+          <View style={styles.containerStep}>
+            <Text style={styles.titleSmall}>Status da Fila</Text>
+            <View style={styles.resultBox}>
+              <View style={styles.resultItem}>
+                <Text style={styles.resultLabel}>Distância</Text>
+                <Text style={styles.resultValue}>45 metros</Text>
+              </View>
+              <View style={styles.divider} />
+              <View style={styles.resultItem}>
+                <Text style={styles.resultLabel}>Tempo Médio</Text>
+                <Text style={styles.resultValue}>12 minutos</Text>
+              </View>
+            </View>
+            <Button title="Voltar ao Início" color="#f1f1f1" textColor="#333" onPress={() => setStep('home')} />
+          </View>
+        );
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" />
+      <Animated.View style={[styles.mainContainer, { opacity: fadeAnim }]}>
+        {renderContent()}
+      </Animated.View>
+    </SafeAreaView>
+  );
+}
+
+// --- ESTILIZAÇÃO (DESIGN SYSTEM) ---
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  mainContainer: {
+    flex: 1,
+    padding: 24,
+    justifyContent: 'center',
+  },
+  center: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  containerStep: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Typography
+  logoText: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#2ECC71',
+    marginTop: 20,
+    letterSpacing: -1,
+  },
+  title: {
+    fontSize: 42,
+    fontWeight: '900',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  titleSmall: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  subtitle: {
+    fontSize: 18,
+    color: '#7F8C8D',
+    textAlign: 'center',
+    marginBottom: 40,
+    lineHeight: 26,
+  },
+  description: {
+    fontSize: 16,
+    color: '#95A5A6',
+    textAlign: 'center',
+    marginBottom: 30,
+  },
+  // Components
+  logoCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#F1FDF6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: "#2ECC71",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  button: {
+    width: '100%',
+    paddingVertical: 18,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  buttonText: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  emoji: {
+    fontSize: 60,
+    marginBottom: 20,
+  },
+  // Cards Grid
+  cardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 30,
+  },
+  card: {
+    width: '47%',
+    backgroundColor: '#F8F9F9',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 15,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    alignItems: 'center',
+  },
+  cardSelected: {
+    borderColor: '#2ECC71',
+    backgroundColor: '#F1FDF6',
+  },
+  cardText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#7F8C8D',
+  },
+  cardTextSelected: {
+    color: '#2ECC71',
+  },
+  // Results
+  resultBox: {
+    width: '100%',
+    backgroundColor: '#F8F9F9',
+    borderRadius: 24,
+    padding: 30,
+    marginBottom: 30,
+    alignItems: 'center',
+  },
+  resultItem: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  resultLabel: {
+    fontSize: 14,
+    color: '#95A5A6',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  resultValue: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#2C3E50',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#EAECEE',
+    width: '80%',
+    marginVertical: 15,
+  },
+  loadingText: {
+    marginTop: 15,
+    color: '#7F8C8D',
+    fontSize: 16,
+  }
+});
